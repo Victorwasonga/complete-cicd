@@ -1,14 +1,46 @@
-name: CI/CD Pipeline
+name: Deploy Docker Image to EC2
 
 on:
   push:
     branches:
-      - main  # Change to 'master' if needed
+      - main  # This triggers the workflow when changes are pushed to the main branch
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
+      # Step 1: Check out the code from the repository
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v2
+
+      # Step 2: Set up Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      # Step 3: Log in to Docker Hub
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}  # Your Docker Hub username
+          password: ${{ secrets.DOCKER_PASSWORD }}  # Your Docker Hub password or access token
+
+      # Step 4: Pull the Docker image from Docker Hub
+      - name: Pull Docker image from Docker Hub
+        run: docker pull victorwasonga/custom-nginx
+
+      # Step 5: Set up SSH to EC2
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.5.3
+        with:
+          ssh-private-key: ${{ secrets.EC2_PRIVATE_KEY }}
+
+      # Step 6: SSH into the EC2 instance and deploy the Docker container
+      - name: Deploy to EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+            # Stop and remove any existing container
+            sudo docker rm -f custom-nginx || true
+            # Run the new Docker container
+            sudo docker run -d -p 80:80 --name custom-nginx victorwasonga/custom-nginx
+          EOF
